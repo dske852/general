@@ -10,8 +10,9 @@ from dataclasses import dataclass
 from src.components.data_transformation import DataTransformation
 from src.components.data_transformation import DataTransformationConfig
 
-from src.components.model_trainer import ModelTrainerConfig
-from src.components.model_trainer import ModelTrainer
+from src.components.model_trainer1 import ModelTrainerConfig
+from src.components.model_trainer1 import ModelTrainer
+import optuna
 
 @dataclass 
 class DataIngestionConfig:
@@ -27,6 +28,9 @@ class DataIngestion:
         logging.info('Data ingestion started')
         try:
             df=pd.read_csv('data\data.csv')
+            ####warning
+            df['species']=df['species'].map({'setosa':'0', 'versicolor':'1', 'virginica':'2'}) ###to pipeline
+            
             logging.info('Dataset imported as DF')
 
             os.makedirs(os.path.dirname(self.ingestion_config.train_data_path),exist_ok=True)
@@ -55,4 +59,13 @@ if __name__=="__main__":
     train_arr,test_arr,_=data_transformation.initiate_data_transformation(train_data,test_data)
 
     modeltrainer=ModelTrainer()
-    print(modeltrainer.initiate_model_trainer(train_arr,test_arr))
+
+    modeltrainer.initiate_model_trainer(train_arr,test_arr)
+
+    study = optuna.create_study(
+    direction="maximize",
+    study_name='skuska',
+    sampler=optuna.samplers.TPESampler(),
+    )
+
+    study.optimize(modeltrainer.objective, n_trials=2)
