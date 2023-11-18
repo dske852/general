@@ -34,8 +34,7 @@ class DataTransformation:
 
             num_pipeline= Pipeline(
                 steps=[
-                ("imputer",SimpleImputer(strategy="median")),
-                ("scaler",StandardScaler())
+                ("imputer",SimpleImputer(strategy="median"))
 
                 ]
             )
@@ -44,8 +43,7 @@ class DataTransformation:
 
                 steps=[
                 ("imputer",SimpleImputer(strategy="most_frequent")),
-                ("one_hot_encoder",OneHotEncoder()),
-                ("scaler",StandardScaler(with_mean=False))
+                ("one_hot_encoder",OneHotEncoder(sparse_output=False, drop="if_binary", handle_unknown="ignore"))
                 ]
 
             )
@@ -58,10 +56,14 @@ class DataTransformation:
                 ("num_pipeline",num_pipeline,numerical_columns),
                 ("cat_pipelines",cat_pipeline,categorical_columns)
 
-                ]
+                ],
+                remainder='passthrough',
+                verbose_feature_names_out=False
 
 
             )
+
+            preprocessor.set_output(transform='pandas')
 
             return preprocessor
         
@@ -83,10 +85,10 @@ class DataTransformation:
             target_column_name="species"
             numerical_columns = ['elevation', 'sepal_length', 'sepal_width', 'petal_length', 'petal_width', 'sepal_area', 'petal_area', 'sepal_aspect_ratio', 'petal_aspect_ratio', 'sepal_to_petal_length_ratio', 'sepal_to_petal_width_ratio', 'sepal_petal_length_diff', 'sepal_petal_width_diff', 'petal_curvature_mm', 'petal_texture_trichomes_per_mm2', 'leaf_area_cm2', 'sepal_area_sqrt', 'petal_area_sqrt', 'area_ratios']
 
-            input_feature_train_df=train_df.drop(columns=[target_column_name],axis=1)
+            input_feature_train_df=train_df
             target_feature_train_df=train_df[target_column_name]
 
-            input_feature_test_df=test_df.drop(columns=[target_column_name],axis=1)
+            input_feature_test_df=test_df
             target_feature_test_df=test_df[target_column_name]
 
             logging.info(
@@ -96,10 +98,8 @@ class DataTransformation:
             input_feature_train_arr=preprocessing_obj.fit_transform(input_feature_train_df)
             input_feature_test_arr=preprocessing_obj.transform(input_feature_test_df)
 
-            train_arr = np.c_[
-                input_feature_train_arr, np.array(target_feature_train_df)
-            ]
-            test_arr = np.c_[input_feature_test_arr, np.array(target_feature_test_df)]
+            train_arr = input_feature_train_arr
+            test_arr = input_feature_test_arr
 
             logging.info(f"Saved preprocessing object.")
 
@@ -110,10 +110,10 @@ class DataTransformation:
 
             )
 
-            return (
-                train_arr,
-                test_arr,
-                self.data_transformation_config.preprocessor_obj_file_path,
-            )
+            train_arr.to_csv(os.path.join('artifacts', 'train_pre.csv'), index=False, header=True)
+            train_arr.to_csv(os.path.join('artifacts', 'test_pre.csv'), index=False, header=True)
+
+            return train_arr, test_arr, self.data_transformation_config.preprocessor_obj_file_path,
+            
         except Exception as e:
             raise CustomException(e,sys)

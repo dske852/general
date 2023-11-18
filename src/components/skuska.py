@@ -1,75 +1,97 @@
-import numpy as np
-from sklearn.datasets import load_iris
-from sklearn.linear_model import SGDClassifier
-from sklearn.model_selection import train_test_split
+import os
+import sys
+from dataclasses import dataclass
+
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import cross_val_score
 
 import optuna
+import xgboost as xgb
 
-X, y = load_iris(return_X_y=True)
-X_train, X_valid, y_train, y_valid = train_test_split(X, y)
+import pickle
 
-class sk:
+@dataclass
+class ModelTrainerConfig:
+    trained_model_file_path=os.path.join("artifacts","model.pkl")
+
+class ModelTrainer:
     def __init__(self):
-        pass
+        self.model_trainer_config=ModelTrainerConfig()
 
+
+    def initiate_model_trainer(self,train_array,test_array):
+        try:
+            logging.info("Split training and test input data")
+
+            self.X_train=train_array.drop('species', axis=1),
+            self.y_train=train_array.loc[:,'species'],
+            self.X_test=test_array.drop('species', axis=1),
+            self.y_test=test_array.loc[:,'species']
+            
+            #return X_train,y_train,X_test,y_test
+        
+        except Exception as e:
+            raise CustomException(e,sys)
 
     def objective(self, trial):
-        clf = SGDClassifier(random_state=0)
-        for step in range(100):
-            clf.partial_fit(X_train, y_train, np.unique(y))
-            intermediate_value = clf.score(X_valid, y_valid)
-            trial.report(intermediate_value, step=step)
-            if trial.should_prune():
-                raise optuna.TrialPruned()
-
-        return clf.score(X_valid, y_valid)
-
-obj=sk()
-
-study = optuna.create_study(direction="maximize")
-study.optimize(obj.objective, n_trials=2)
-
-#if __name__=="__main__":
-    #obj=skuska()
-    #obj.sk1()
-
-class trainer:
-    def __init__(self):
-        pass
-    def data(self,c,d):
-        X_train=c
-        y=d
-        return X_train, y
-
-    def model(self):
-        a,b=self.data()
-        return print(a,b)
-
     
-    #def model(self):
-        #X_train,y_train=self.initiate_model_trainer()
+        model_name = trial.suggest_categorical("classifier", ['xgb'])#"lgbm",
     
-
-obj=trainer()
-obj.data('a','b')
-
-obj.model()
+        X_train=self.X_train
+        y_train=self.y_train
 
 
-class Test():
-    def abc(self,a,b,c):
-        a = a
-        b = b
-        c = c
-        return a,b,c
-    def defg(self):
-        print('inside defg second function')
-        a,b,c = self.abc()
-        return a,b,c
+        if model_name =="xgb":
+            xgb_n_estimators = trial.suggest_int("xgb_n_estimators", 200, 2500)
+            xgb_max_depth = trial.suggest_int("xgb_max_depth", 1, 10)
+            xgb_learning_rate = trial.suggest_float("xgb_learning_rate", 0.01, 0.99)
+            xgb_gamma = trial.suggest_float("xgb_gamma", 0.01, 10)
+            xgb_subsample = trial.suggest_float("xgb_subsample", 0.50, 0.90)
+            xgb_colsample_bytree = trial.suggest_float("xgb_colsample_bytree", 0.50, 0.90)
+            xgb_colsample_bynode = trial.suggest_float("xgb_colsample_bynode", 0.50, 0.90)
+        
+            model = xgb.XGBClassifier( random_state=42,use_label_encoder=False,
+                n_estimators=xgb_n_estimators,
+                max_depth=xgb_max_depth,
+                learning_rate=xgb_learning_rate,
+                gamma=xgb_gamma,
+                subsample=xgb_subsample,
+                colsample_bytree=xgb_colsample_bytree,
+                colsample_bynode=xgb_colsample_bynode
+        )
 
-c = Test()
-c.defg()
+    # starting point for the optimization
+        cv_metric = "f1_weighted"
 
-
-
+        score = cross_val_score(model, self.X_train, self.y_train, cv=2,scoring=cv_metric)
+        cv_metric_mean = score.mean()
+        cv_metric_std = score.std()
     
+        global best_score
+        global best_margin_error
+
+    # If the classification metric of the saved model is improved ...
+        path_best_model = f'm_model.pickle'
+
+        best_score = 0
+        best_margin_error = 5
+
+        if cv_metric_mean > best_score:
+                save_object(
+                file_path=self.model_trainer_config.trained_model_file_path,
+                obj=model)
+        #model.save(path_best_model)
+            #with open(self.trained_model_file_path, 'wb') as study_file:
+                #pickle.dump(model, file=study_file)
+
+        # Update the classification metric.
+                best_score = cv_metric_mean
+                best_margin_error = cv_metric_std
+
+    # Delete the previous model with these hyper-parameters from memory.
+        del model
+    
+        return cv_metric_mean   
+
